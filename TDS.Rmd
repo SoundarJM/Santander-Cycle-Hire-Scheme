@@ -1,0 +1,141 @@
+---
+title: "Coursework submission for Transport Data Science (TRAN5340M)"
+author: "Soundar Jambu"
+output:
+  pdf_document:
+    number_sections: yes
+  html_document:
+    df_print: paged
+  word_document: default
+subtitle: 'Cycle Hire Scheme Analysis '
+---  
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, eval = TRUE)
+```
+  
+
+# Introduction
+This project aims at understanding the usage of bicycles in the city of London in different time scale. The Santander Cycle Hire Scheme is popularly known as Boris Bikes, as it came into operational when he was Mayor of London. The reson behind the name is because of the sponsorship. It was ealrier called as 'Barclays Cycle hire' until april 2015, which then the sponsorship was took over by Santander. In an intresting study, it has been found that people using hire scheme cycles are tend to incur less injury than the normal cyclist. Also, a customer research in 2013 showed that, 49 percent of the members of cycle hire scheme told that the sheme has prompted them to involve in more cycling than before. The scheme has been in use since June 30,2010 started with 5000 bicycles and 315 docking stations.
+
+```{r, message=FALSE, eval=FALSE}
+install.packages("remotes")
+install.packages("osmextract")
+install.packages("pct")
+install.packages("sf")
+install.packages("stplanr")
+install.packages("tidyverse")
+install.packages("dplyr")
+install.packages("sp")
+install.packages("ggplot2")
+install.packages("corrplot")
+```
+
+```{r, message=FALSE}
+# required packages
+library(sf)       # spatial vector data classes
+library(stats19)  # get stats19 data
+library(stplanr)  # transport planning tools
+library(spData)   # example spatial data sets
+library(tidyverse)# packages for data science
+library(dplyr)    # pipelines for manipulating and plotting data
+library(sp)       # dealing with spatial data
+library(ggplot2)  # plotting graphs                                 
+library("corrplot") # plotting correlation
+
+```
+
+# Dataset cleaning and manipulation
+The data for this analysis has been obtained from two different resources. The day wise bicycle hire count for the city of London has been obtained from the official database of government of uk (data.london.gov.uk). And then, the daily weather data has been obatined from the site called visualcrossing.com . Both the obtained datasets are available in the excel format.\
+Then the two datasets are merged manually using the dates as a common point and added a categorical variable called 'Season' with four values as 1 denoting winter (December, January, February), 2 denoting spring (March, April, May), 3 denoting summer (June, July, August) and 4 denoting fall (September, October, November). Also, the weather conditions has been converted to numerical for convenience (Clear = 1, Cloudy = 2, Rain = 3, Snow = 4).
+
+```{r,echo=FALSE}
+# Input data
+bike_count= read.csv("Data/bike_ride.csv")
+head(bike_count)
+```
+
+
+
+```{r eval=FALSE}
+# Checking the number of categorical values in applicable variable (conditions and Season)
+sapply(bike_count,n_distinct)
+```
+The column weather condition has four categorical values such as clear sky, Cloudy, Rain and Snow\
+The column Seasons has four categorical values such as Winter, Spring, Summer and Fall.
+```{r}
+# Statistical summary
+summary(bike_count)
+```
+In the period of four years between 2017 and 2020, the lowest temperature recorded is around -3.3°C and the highest recorded temperature is around 28.30°C ( which is better than this year as of now). The highest hire count per day tops at 70170 and the lowest per day hire count is at 4872. The highest wind range has been pretty worse recorded at the level of 59 kph speed.
+```{r}
+# Subsetting dataset into individual years 
+year2017 <-bike_count[bike_count$Day < "2018-01-01",]
+year2018 <-bike_count[bike_count$Day > "2017-12-31" & bike_count$Day < "2019-01-01",]
+year2019 <-bike_count[bike_count$Day > "2018-12-31" & bike_count$Day < "2020-01-01",]
+year2020 <-bike_count[bike_count$Day > "2019-12-31",]
+# Subsetting date column into separate year, month and day
+temp_df <- data.frame(date = bike_count$Day,
+                 year = as.numeric(format(bike_count$Day, format = "%Y")),
+                 month = as.numeric(format(bike_count$Day, format = "%m")),
+                 day = as.numeric(format(bike_count$Day, format = "%d")))
+```
+
+# Outlier detection and Analysis
+```{r}
+# Boxplot of count against daily weather condition
+boxplot(Hire_count ~ conditions, data = bike_count,xlab = "Weather Conditions",ylab = "Count of bike hiring",names = c("Clear", "Cloudy", "Rainy", "Snow"), col = c("#999999", "#E69F00", "#56B4E9", "#CC0066"),main = "Plot of Count by Weather conditions")
+```
+Note: 1= clear sky, 2 = Cloudy, 3 = Rainy, 4 = Snow
+The above plot clearly shows that the hire count is high during clear sky condition and somewhat cloudy. As the weather gets worse towards rainy and snow the hire count also decreases. During clear sky there are many outliers, its due to the tendency that more people every randomn day likes to go out during clear sky than a cloudy sky as it clouds people's decision whether to go out or not (unsure). In addition, under cloudy days there are less ouliers, its beacause quite a number of cloudy days gets classified under clear sky and rainy days in the process of strict classification into categorical values.
+```{r}
+# Boxplot of count against Seasonal changes
+boxplot(Hire_count ~ Season, data = bike_count,xlab = "Seasons",ylab = "Count of bike hiring",names = c("Winter", "Spring", "Summer", "Fall"), col = c("#999999", "#E69F00", "#56B4E9", "#CC0066"),main = "Plot of Count by Seasonal changes")
+```
+Note: 1= winter, 2 = spring, 3 = summer, 4 = fall
+The above plot clearly shows that the hire count is highest during summer, least during winter and moderate during spring and fall. In addition, during winter there isn't much or in fact no outliers are there, which makes sense that no one really wants to go out suddenly in a bike during winter. This doesn't mean there isn't any hire count. It's just there isn't any sudden rise in the hire count during any such day in winter. 
+
+```{r}
+# Year wise hiring count
+yhirecount<- c(sum(year2017$Hire_count),sum(year2018$Hire_count),sum(year2019$Hire_count),sum(year2020$Hire_count))
+year<- c('2017','2018','2019','2020')
+year
+```
+
+```{r}
+# Scatter group plot in accordance to Seasonal Changes
+
+ggplot(bike_count, aes(Hire_count,temp,col=factor(Season))) +ggtitle("Scatter plot of Count by tempearture ") +xlab("Hire Count") + ylab("Temeprature Change") + labs(color='Seasons') +geom_point()
+```
+The above plot helps us to visualize the hire count and temperature relationship in accordance to the seasonal changes
+```{r}
+# Scatter group plot in accordance to Daily weather Changes
+ggplot(bike_count, aes(Hire_count,temp,col=factor(conditions))) +ggtitle("Scatter plot of Count by tempearture ") +xlab("Hire Count") + ylab("Temeprature Change") + labs(color='Weather') +geom_point()
+
+```
+The above plot helps us to visualize the hire count and temperature relationship in accordance to the daily weather changes.
+
+# Evaluating Correlation
+  
+```{r}
+correlation <-cor(select(bike_count, Hire_count, temp, feelslike,humidity,precip,dew,windspeed))
+correlation
+corrplot(correlation,method="circle")
+```
+As per the correlation matrix plot, we can observe that the hire count is in positive correlation to the temperature. So overall the main influence in people's decision to take go out depends on the heat range of the day. Even the variable dew has pretty high correlation to the hire count. It's interesting that the wind speed is in negative correlation to the hire count. It may be because of the factor that winds do not follow overall average pattern for a certain period of time unlike a season which almost covers a period a four months.
+
+# Discussion 
+The introduction of bicycle hire scheme has been helpful to people in many ways. It could be for their daily commute, quick short distance travels to avoid traffic, as quick refreshing physical exercise in the day to day busy life and more over it just gives a chance to try new things and go out, especially after covid. Also, it is an fully green mode of transport.\
+With all these things being said, it still involves a huge amount of money and efforts to pull this more effectively. Maintaining real time availability check, damage / theft of bikes, identifying the people responsible for any misconduct using the services, repairs and maintenance, policy and pricing updates for the scheme to make it reliable and affordable for short and long term users, expanding and encouraging more green routes inside the city and a lot more.\
+
+It is really good in this digital age, all these data are available, so that planned and required measures can be taken effectively based on the past data. As we all heard "History repeats itself". So based on the insights gained from the usage records and past data, time period to take measures like maintenance of the docking stations, repairing the damaged bikes, annual inspection, necessity of more or less bikes in certain region can be found.
+
+# Conclusion
+With more people flocking towards cities for business opportunities and lifestyle changes and their financial needs, the congestion, crowd, traffic and pollution increases more, especially in big cities and developing nations. To tackle that more green routes and encouragement of green mode of transport should be in place. Time series data provides so much useful insights when manipulated and used in a right way to achieve what we need. Further work like based on the future weather forecast, we could predict the hire count in regional and seasonal wise. This will help in saving time to allocate the resources to meet the demands in right time and to provide promotional offers to encourage emmission free transport.
+
+# References
+1. Hiring data has been collected from the UK government official website.
+(data.london.gov.uk)
+2. Weather data has been accumulated from an open source weather forecasting site.
+(https://www.visualcrossing.com)
+
